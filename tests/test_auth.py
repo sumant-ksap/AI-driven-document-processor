@@ -35,6 +35,7 @@ def test_pin_required(make_client):
         assert r.status_code == 303 and r.headers["location"] == "/login"
         assert c.get("/api/visits").status_code == 401
         assert c.get("/static/index.html").status_code == 303
+        assert c.get("/api/session").json() == {"pin_required": True}  # open, so clients can check
         assert "Wrong PIN" in c.post("/login", data={"pin": "000000"}).text
 
         r = c.post("/login", data={"pin": "482913"})

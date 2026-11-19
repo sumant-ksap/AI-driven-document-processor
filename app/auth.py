@@ -22,7 +22,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 COOKIE = "gate_session"
 SESSION_SECONDS = 12 * 3600
 MAX_FAILURES, FAILURE_WINDOW = 5, 300  # 5 wrong PINs per 5 minutes per device, then locked out
-OPEN_PATHS = {"/login", "/logout", "/favicon.ico"}
+# /api/session only says whether a PIN is needed, so API clients can check before logging in.
+OPEN_PATHS = {"/login", "/logout", "/favicon.ico", "/api/session"}
 SECRET_FILE = Path(__file__).resolve().parent.parent / "data" / "session_secret"
 
 _failures: dict[str, deque] = defaultdict(deque)
