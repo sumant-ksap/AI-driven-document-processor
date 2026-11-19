@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate Check-In Scanner</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #fff; --ink: #1d2330; --muted: #667085; --line: #e2e5ea;
+    --accent: #2457d6; --ok: #1f8a4c; --ok-bg: #e8f6ee; --warn: #a86400; --warn-bg: #fff4e0;
+    --err: #c0262d; --err-bg: #fdecec; --info-bg: #eef3fd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+  header { padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 17px; margin: 0; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--warn-bg); color: var(--warn); }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: 1fr 360px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  h2 { font-size: 14px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 28px; text-align: center; cursor: pointer; color: var(--muted); }
+  #drop.over { border-color: var(--accent); background: var(--info-bg); }
+  #filelist { margin: 8px 0 0; font-size: 13px; }
+  button { font: inherit; border: 0; border-radius: 6px; padding: 9px 16px; cursor: pointer; background: var(--accent); color: #fff; font-weight: 600; }
+  button.secondary { background: #e9ecf2; color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .field label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  .field input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
+  .field.review input { border-color: var(--warn); background: var(--warn-bg); }
+  .field.error input { border-color: var(--err); background: var(--err-bg); }
+  .field.matched input { border-color: var(--ok); }
+  .conf { font-variant-numeric: tabular-nums; }
+  .tag { font-size: 11px; color: var(--ok); }
+  .flag { padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+  .flag.error { background: var(--err-bg); color: var(--err); }
+  .flag.warning { background: var(--warn-bg); color: var(--warn); }
+  .flag.info { background: var(--info-bg); color: #2c4a8a; }
+  .status { padding: 10px 12px; border-radius: 6px; font-weight: 600; margin-bottom: 12px; }
+  .status.ok { background: var(--ok-bg); color: var(--ok); }
+  .status.no { background: var(--warn-bg); color: var(--warn); }
+  input.plain { padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px; font: inherit; min-width: 0; flex: 1; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  .muted { color: var(--muted); }
+  .hidden { display: none; }
+  #msg { margin-top: 10px; font-size: 13px; }
+  h3.group { font-size: 13px; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); color: var(--ink); }
+  h3.group:first-child { margin-top: 0; }
+  .field.empty input { color: var(--muted); }
+  .field.wide { grid-column: 1 / -1; }
+  .field textarea { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; font: inherit; resize: vertical; }
+  .field.review textarea { border-color: var(--warn); background: var(--warn-bg); }
+  .field.error textarea { border-color: var(--err); background: var(--err-bg); }
+  .field.matched textarea { border-color: var(--ok); }
+  .tablewrap { overflow-x: auto; }
+  #lines input { width: 100%; min-width: 56px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+  #lines td:nth-child(4) input { min-width: 160px; }
+  #lines tr.review input { border-color: var(--warn); background: var(--warn-bg); }
+  #lines td { padding: 3px 2px; border: 0; }
+  button.small { padding: 5px 10px; font-size: 12px; margin-top: 6px; }
+  button.x { background: none; color: var(--muted); padding: 2px 6px; font-weight: 400; }
+  /* "Show issues" off: plain values, no flag panel, banner or colored fields. */
+  body.hide-issues #flagsBox, body.hide-issues #readiness { display: none !important; }
+  body.hide-issues .field input, body.hide-issues .field textarea, body.hide-issues #lines tr input {
+    border-color: var(--line) !important; background: #fff !important; }
+  .camwrap { position: relative; margin-top: 10px; background: #000; border-radius: 8px; overflow: hidden; }
+  #camVideo { display: block; width: 100%; max-height: 60vh; object-fit: contain; }
+  #camVideo.mirror { transform: scaleX(-1); }  /* preview only; captured image is not mirrored */
+  .countdown { position: absolute; inset: 0; display: grid; place-items: center; font-size: 96px; font-weight: 700; color: #fff; text-shadow: 0 2px 12px #000; pointer-events: none; }
+  #camSelect { padding: 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; max-width: 220px; }
+  .camguide { position: absolute; inset: 6% 10%; border: 2px dashed rgba(255,255,255,.7); border-radius: 6px; pointer-events: none; }
+  #filelist { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 4px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; background: #fafbfc; }
+  .chip img { width: 40px; height: 52px; object-fit: cover; border-radius: 3px; }
+  .chip .pdf { width: 40px; height: 52px; display: grid; place-items: center; background: var(--err-bg); color: var(--err); font-weight: 700; border-radius: 3px; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin-bottom: 8px; cursor: pointer; }</style>
+</head>
+<body>
+<header><h1>Gate Check-In Scanner</h1><span id="mode" class="badge hidden"></span>
+  <a id="lockBtn" href="/logout" class="hidden" style="margin-left:auto;color:var(--muted);font-size:13px;text-decoration:none">🔒 Lock</a></header>
+<main>
+  <div style="display:grid; gap:16px; align-content:start">
+    <section>
+      <h2>1. Scan documents</h2>
+      <div id="drop">Drop BOL, IAC form, or shipment documents here, or click to choose<br><small>Photos or PDFs, up to 6 files</small></div>
+      <input id="file" type="file" accept="image/*,application/pdf" multiple class="hidden">
+      <!-- Fallback when live camera access is unavailable (e.g. phone on plain http): opens the device camera app. -->
+      <input id="camFallback" type="file" accept="image/*" capture="environment" class="hidden">
+      <div class="row" style="margin-top:10px"><button class="secondary" id="camBtn">📷 Use camera</button></div>
+
+      <div id="camPanel" class="hidden">
+        <div class="camwrap"><video id="camVideo" autoplay playsinline muted></video><div class="camguide"></div><div id="countdown" class="countdown hidden"></div></div>
+        <div class="row">
+          <button id="captureBtn">Capture</button>
+          <label class="toggle" style="margin:0"><input type="checkbox" id="camTimer" checked> 3-second timer</label>
+          <select id="camSelect" class="hidden" title="Camera"></select>
+          <button class="secondary" id="closeCam">Close camera</button>
+          <span id="camState" class="muted"></span>
+        </div>
+      </div>
+
+      <div id="filelist"></div>
+      <div class="row"><button id="scanBtn" disabled>Scan &amp; auto-fill</button><span id="scanState" class="muted"></span></div>
+    </section>
+
+    <section id="review" class="hidden">
+      <h2>2. Review visit fields</h2>
+      <div id="readiness" class="status"></div>
+      <label class="toggle"><input type="checkbox" id="showEmpty"> Show empty fields</label>
+      <label class="toggle" style="margin-left:14px"><input type="checkbox" id="showIssues"> Show issues</label>
+      <div id="fields"></div>
+      <div id="linesBox">
+      <h3 class="group">Freight / Line Items</h3>
+      <div class="tablewrap">
+        <table id="lines"><thead><tr><th>Qty</th><th>Pkg</th><th>Pcs</th><th>Description</th><th>Class</th><th>NMFC</th><th>Dims</th><th>Weight (lbs)</th><th>HM</th><th>Marks</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+      <button class="secondary small" id="addLine">+ Add line</button>
+      </div>
+      <div class="row">
+        <input id="reviewer" class="plain" placeholder="Your name (required)">
+        <button class="secondary" id="revalBtn">Re-check</button>
+        <button class="secondary" id="csvBtn" title="Download all extracted data, including your edits">Download CSV</button>
+        <button id="checkinBtn">Confirm check-in</button>
+      </div>
+      <div class="row hidden" id="overrideRow">
+        <input id="override" class="plain" placeholder="Override reason (required to check in with errors)">
+      </div>
+      <div id="msg"></div>
+    </section>
+  </div>
+
+  <div style="display:grid; gap:16px; align-content:start">
+    <section id="gapsBox" class="hidden"><h2>Missing or uncertain information</h2><div id="gaps"></div></section>
+    <section id="flagsBox" class="hidden"><h2>Flags</h2><div id="flags"></div></section>
+    <section>
+      <h2>Recent visits</h2>
+      <table><thead><tr><th>#</th><th>Trailer</th><th>BOL</th><th></th></tr></thead><tbody id="visits"></tbody></table>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// PIN mode: an expired session makes the API answer 401, so send the user back to the PIN screen.
+const _fetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const r = await _fetch(...args);
+  if (r.status === 401) { location.href = "/login"; throw new Error("Session expired"); }
+  return r;
+};
+fetch("/api/session").then(r => r.json()).then(s => $("lockBtn").classList.toggle("hidden", !s.pin_required)).catch(() => {});
+let chosen = [], scan = null;
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+const MAX_FILES = 6;
+
+function setFiles(list) {
+  chosen = [...list].slice(0, MAX_FILES);
+  renderFileList();
+}
+// Dropped, picked and captured documents accumulate, so a BOL photo and an IAC PDF can be scanned together.
+function addFiles(list) {
+  const incoming = [...list];
+  if (chosen.length + incoming.length > MAX_FILES) $("scanState").textContent = `Only ${MAX_FILES} documents per scan; extra files were skipped.`;
+  setFiles([...chosen, ...incoming]);
+}
+function renderFileList() {
+  document.querySelectorAll("#filelist img").forEach(img => URL.revokeObjectURL(img.src));
+  $("filelist").innerHTML = "";
+  chosen.forEach((f, i) => {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.innerHTML = (f.type.startsWith("image/") ? `<img alt="">` : `<span class="pdf">PDF</span>`)
+      + `<span>${esc(f.name)}</span><button class="x" title="Remove">✕</button>`;
+    if (f.type.startsWith("image/")) chip.querySelector("img").src = URL.createObjectURL(f);
+    chip.querySelector("button").onclick = () => { chosen.splice(i, 1); renderFileList(); };
+    $("filelist").appendChild(chip);
+  });
+  $("scanBtn").disabled = !chosen.length;
+}
+$("drop").onclick = () => $("file").click();
+$("file").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+
+// ---------- camera ----------
+let camStream = null, camDeviceId = null, captureCount = 0, counting = false;
+
+async function openCamera() {
+  // Browsers only allow live camera on https or localhost; elsewhere use the device camera app.
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) { $("camFallback").click(); return; }
+  stopCamera();
+  // Ask for the camera's highest resolution: built-in webcams default to 640x480, too little for small print.
+  const video = { width: { ideal: 3840 }, height: { ideal: 2160 } };
+  if (camDeviceId) video.deviceId = { exact: camDeviceId };
+  else video.facingMode = { ideal: "environment" };  // phones/tablets: rear camera; laptops just use the webcam
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+  } catch (e) {
+    $("scanState").textContent = e.name === "NotAllowedError" ? "Camera permission was denied. Allow it in the browser's site settings (lock icon in the address bar)."
+      : e.name === "NotFoundError" ? "No camera found on this device."
+      : e.name === "NotReadableError" ? "The camera is in use by another app (Teams, Zoom, Camera). Close it and try again."
+      : "Could not start camera: " + e.message;
+    return;
+  }
+  const track = camStream.getVideoTracks()[0];
+  const settings = track.getSettings();
+  camDeviceId = settings.deviceId || camDeviceId;
+  // Keep focus continuous where the webcam supports it (most fixed-focus laptop cams ignore this).
+  try {
+    if (track.getCapabilities?.().focusMode?.includes("continuous")) await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+  } catch {}
+  // Mirror the preview for front/laptop cameras so moving the paper left moves it left on screen.
+  $("camVideo").classList.toggle("mirror", settings.facingMode !== "environment");
+  $("camVideo").srcObject = camStream;
+  $("camPanel").classList.remove("hidden");
+  $("camBtn").disabled = true;
+  $("camState").textContent = `${track.label || "Camera"} at ${settings.width}×${settings.height}. Hold the document flat inside the dashed frame, in good light.`;
+  await listCameras();
+}
+
+// Camera picker appears only when there is more than one (e.g. a USB document camera plugged in).
+async function listCameras() {
+  const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+  $("camSelect").classList.toggle("hidden", cams.length < 2);
+  $("camSelect").innerHTML = cams.map((c, i) =>
+    `<option value="${esc(c.deviceId)}"${c.deviceId === camDeviceId ? " selected" : ""}>${esc(c.label || "Camera " + (i + 1))}</option>`).join("");
+}
+
+function stopCamera() {
+  if (camStream) camStream.getTracks().forEach(t => t.stop());
+  camStream = null;
+  $("camVideo").srcObject = null;
+  $("camPanel").classList.add("hidden");
+  $("camBtn").disabled = false;
+}
+
+$("camBtn").onclick = openCamera;
+$("closeCam").onclick = stopCamera;
+$("camSelect").onchange = e => { camDeviceId = e.target.value; openCamera(); };
+$("camFallback").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+
+function takePhoto() {
+  const v = $("camVideo");
+  if (!v.videoWidth || !camStream) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = v.videoWidth; canvas.height = v.videoHeight;  // full camera resolution, not the preview size
+  canvas.getContext("2d").drawImage(v, 0, 0);                  // unmirrored, so text reads correctly
+  canvas.toBlob(blob => {
+    captureCount += 1;
+    addFiles([new File([blob], `camera-${captureCount}.jpg`, { type: "image/jpeg" })]);
+    $("camState").textContent = `Captured page ${captureCount} (${canvas.width}×${canvas.height}). Capture another page or press Scan.`;
+  }, "image/jpeg", 0.92);
+}
+
+$("captureBtn").onclick = () => {
+  if (counting) return;
+  if (chosen.length >= MAX_FILES) { $("camState").textContent = `Already ${MAX_FILES} documents; remove one or scan first.`; return; }
+  if (!$("camTimer").checked) { takePhoto(); return; }
+  // Countdown leaves both hands free to hold the paper steady in front of the webcam.
+  counting = true;
+  $("captureBtn").disabled = true;
+  let n = 3;
+  const cd = $("countdown");
+  cd.textContent = n; cd.classList.remove("hidden");
+  const tick = setInterval(() => {
+    n -= 1;
+    if (n > 0) { cd.textContent = n; return; }
+    clearInterval(tick);
+    cd.classList.add("hidden");
+    takePhoto();
+    counting = false;
+    $("captureBtn").disabled = false;
+  }, 1000);
+};
+["dragover","dragenter"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave","drop"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", e => addFiles(e.dataTransfer.files));
+
+$("scanBtn").onclick = async () => {
+  const fd = new FormData();
+  chosen.forEach(f => fd.append("files", f));
+  stopCamera();  // release the camera while the model reads (scans take a minute or more)
+  $("scanBtn").disabled = true; $("scanState").textContent = "Reading documents…"; $("msg").textContent = "";
+  try {
+    const r = await fetch("/api/scan", { method: "POST", body: fd });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || r.statusText);
+    scan = body; render();
+    $("scanState").textContent = `Read ${body.files.length} document(s): ${body.document_types.join(", ").replaceAll("_", " ")}`;
+  } catch (e) { $("scanState").textContent = "Scan failed: " + e.message; }
+  $("scanBtn").disabled = false;
+};
+
+function fieldFlags(flags) {
+  const m = {};
+  flags.forEach(f => { if (f.field) (m[f.field] ||= []).push(f); });
+  return m;
+}
+
+function render() {
+  $("mode").classList.toggle("hidden", scan.extractor !== "mock");
+  $("mode").textContent = "MOCK MODE – canned data, documents not read";
+  $("review").classList.remove("hidden");
+  const byField = fieldFlags(scan.flags);
+  const groups = [];
+  scan.fields.forEach(f => {
+    let g = groups.find(x => x.name === f.group);
+    if (!g) groups.push(g = { name: f.group, fields: [] });
+    g.fields.push(f);
+  });
+  $("fields").innerHTML = groups.map(g => `<div class="grp"><h3 class="group">${esc(g.name)}</h3><div class="grid">` + g.fields.map(f => {
+    const fl = byField[f.key] || [];
+    // Empty but flagged (required/recommended) fields stay visible so the clerk can fill them in.
+    const flagged = fl.some(x => x.severity !== "info") ? " flagged" : "";
+    const cls = fl.some(x => x.severity === "error") ? "error" : (f.needs_review ? "review" : (f.matched_record ? "matched" : (f.value == null ? "empty" : "")));
+    const tip = fl.map(x => x.message).join("\n");
+    const conf = f.value == null ? "" : `<span class="conf">${Math.round(f.confidence * 100)}%</span>`;
+    const wide = /_address$|special_instructions|goods_description/.test(f.key);
+    const box = wide
+      ? `<textarea data-key="${f.key}" rows="2" placeholder="—">${esc(f.value)}</textarea>`
+      : `<input data-key="${f.key}" value="${esc(f.value)}" placeholder="—">`;
+    return `<div class="field ${cls}${wide ? " wide" : ""}${flagged}" data-tip="${esc(tip)}">
+      <label><span>${esc(f.label)} ${f.matched_record ? '<span class="tag">✓ on file</span>' : ""}</span>${conf}</label>
+      ${box}</div>`;
+  }).join("") + "</div></div>").join("");
+  $("lines").tBodies[0].innerHTML = "";
+  scan.line_items.forEach(li => addLine(li.values, li.needs_review));
+  applyVisibility();
+  applyIssues();  // also renders the flags panel
+}
+
+// Hidden fields stay in the page, so their keys are still sent at check-in.
+function applyVisibility() {
+  const showAll = $("showEmpty").checked;
+  document.querySelectorAll("#fields .field").forEach(div => {
+    const hasData = div.querySelector("[data-key]").value.trim() !== "";
+    div.classList.toggle("hidden", !(showAll || hasData || div.classList.contains("flagged")));
+  });
+  document.querySelectorAll("#fields .grp").forEach(g =>
+    g.classList.toggle("hidden", !g.querySelector(".field:not(.hidden)")));
+  $("linesBox").classList.toggle("hidden", !showAll && !$("lines").tBodies[0].rows.length);
+}
+$("showEmpty").onchange = applyVisibility;
+
+const COLS = ["quantity","package_type","pieces","description","freight_class","nmfc_number","dimensions","weight_lbs","hazmat","marks"];
+function addLine(values = {}, review = false) {
+  const tr = document.createElement("tr");
+  if (review) tr.className = "review";
+  tr.innerHTML = COLS.map(c => `<td><input data-col="${c}" value="${esc(values[c])}"></td>`).join("")
+    + `<td><button class="x" title="Remove line">✕</button></td>`;
+  tr.querySelector("button.x").onclick = () => tr.remove();
+  $("lines").tBodies[0].appendChild(tr);
+}
+$("addLine").onclick = () => addLine();
+
+function lineItems() {
+  return [...$("lines").tBodies[0].rows].map(tr => {
+    const row = {};
+    tr.querySelectorAll("input").forEach(i => row[i.dataset.col] = i.value.trim() || null);
+    return row;
+  }).filter(r => Object.values(r).some(v => v));
+}
+
+const MISSING_CODES = ["missing_required", "missing_recommended", "incomplete_address"];
+const UNCERTAIN_CODES = ["low_confidence", "document_conflict"];
+
+function renderGaps(flags) {
+  const pick = codes => flags.filter(f => codes.includes(f.code));
+  const missing = pick(MISSING_CODES), uncertain = pick(UNCERTAIN_CODES);
+  const list = (title, items, cls) => items.length
+    ? `<div class="muted" style="margin:6px 0 4px">${title}</div>` + items.map(f => `<div class="flag ${cls}">${esc(f.message)}</div>`).join("")
+    : "";
+  // The full Flags panel already lists these when "Show issues" is on.
+  $("gapsBox").classList.toggle("hidden", showIssues() || !(missing.length + uncertain.length));
+  $("gaps").innerHTML = list("Missing", missing, "error") + list("Uncertain", uncertain, "warning");
+}
+
+function renderFlags(flags, ready) {
+  renderGaps(flags);
+  $("flagsBox").classList.toggle("hidden", !flags.length);
+  $("flags").innerHTML = flags.map(f => `<div class="flag ${f.severity}">${esc(f.message)}</div>`).join("");
+  const errors = flags.filter(f => f.severity === "error").length;
+  $("readiness").className = "status " + (ready ? "ok" : "no");
+  $("readiness").textContent = ready ? "All fields verified – ready to check in"
+    : errors ? `${errors} issue(s) must be resolved or overridden. Highlighted fields need review.`
+    : "Review the highlighted fields, then confirm.";
+  // With issues hidden, the override box appears only after a check-in is refused.
+  $("overrideRow").classList.toggle("hidden", !errors || !showIssues());
+}
+
+function payload() {
+  const fields = {};
+  document.querySelectorAll("#fields [data-key]").forEach(i => fields[i.dataset.key] = i.value.trim() || null);
+  return { scan_id: scan.scan_id, fields, line_items: lineItems(), reviewed_by: $("reviewer").value.trim(), override_reason: $("override").value.trim() || null };
+}
+
+$("revalBtn").onclick = async () => {
+  const r = await fetch("/api/revalidate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload()) });
+  const body = await r.json();
+  if (!r.ok) { $("msg").textContent = body.detail; return; }
+  const byField = fieldFlags(body.flags);
+  document.querySelectorAll("#fields .field").forEach(div => {
+    const key = div.querySelector("[data-key]").dataset.key, fl = byField[key] || [];
+    div.classList.remove("review", "error");
+    if (fl.some(x => x.severity === "error")) div.classList.add("error");
+    else if (fl.some(x => x.severity === "warning")) div.classList.add("review");
+  });
+  // Line-item flags are keyed "line_items.N" (1-based, counting non-empty rows).
+  [...$("lines").tBodies[0].rows].filter(tr => [...tr.querySelectorAll("input")].some(i => i.value.trim()))
+    .forEach((tr, i) => tr.classList.toggle("review", (byField[`line_items.${i + 1}`] || []).some(x => x.severity !== "info")));
+  renderFlags(body.flags, !body.flags.some(f => f.severity !== "info"));
+};
+
+const COL_LABELS = { quantity: "QTY", package_type: "PKG", pieces: "PCS", description: "Description",
+  freight_class: "Class", nmfc_number: "NMFC", dimensions: "DIMS", weight_lbs: "Weight (lbs)", hazmat: "HM", marks: "Marks" };
+
+function csvCell(v) {
+  let s = v == null ? "" : String(v);
+  // Stop spreadsheet apps from running a value as a formula (e.g. "=HYPERLINK(...)").
+  if (/^[=+@\t\r]/.test(s) || /^-(?!\d)/.test(s)) s = "'" + s;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function buildCsv() {
+  const current = payload();
+  const extracted = Object.fromEntries(scan.fields.map(f => [f.key, f]));
+  const flagged = fieldFlags(scan.flags);
+  const rows = [["Section", "Field", "Value", "Extracted Value", "Confidence", "Status", "Notes"]];
+  // Same fields as on screen: empty ones are left out unless "Show empty fields" is ticked.
+  const shown = new Set([...document.querySelectorAll("#fields .field:not(.hidden) [data-key]")].map(e => e.dataset.key));
+  scan.fields.filter(f => shown.has(f.key)).forEach(f => {
+    const value = current.fields[f.key];
+    const status = (flagged[f.key] || []).some(x => x.severity === "error") ? "error"
+      : (value ?? null) !== (f.value ?? null) ? "edited by reviewer"
+      : f.needs_review ? "needs review" : f.matched_record ? "matched on file" : value == null ? "not on document" : "ok";
+    rows.push([f.group, f.label, value, f.value, f.value == null ? "" : Math.round(f.confidence * 100) + "%", status,
+      (flagged[f.key] || []).map(x => x.message).join("; ")]);
+  });
+  current.line_items.forEach((li, i) => {
+    const orig = scan.line_items[i] ? scan.line_items[i].values : {};
+    COLS.forEach(c => rows.push(["Line Items", `Line ${i + 1} ${COL_LABELS[c]}`, li[c], orig[c], "", "", ""]));
+  });
+  scan.flags.filter(f => !f.field).forEach(f => rows.push(["Document", "Flag", f.message, "", "", f.severity, ""]));
+  rows.push(["Document", "Source files", scan.files.join("; "), "", "", "", ""]);
+  rows.push(["Document", "Document types", scan.document_types.join("; "), "", "", "", ""]);
+  return rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+}
+
+$("csvBtn").onclick = () => {
+  const ref = (payload().fields.bol_number || scan.scan_id).replace(/[^\w-]+/g, "_");
+  const blob = new Blob(["﻿" + buildCsv()], { type: "text/csv;charset=utf-8" }); // BOM: Excel reads UTF-8 correctly
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(blob), download: `extracted_${ref}_${new Date().toISOString().slice(0, 10)}.csv` });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+$("checkinBtn").onclick = async () => {
+  const p = payload();
+  if (!p.reviewed_by) { $("msg").textContent = "Enter your name to confirm."; $("reviewer").focus(); return; }
+  const r = await fetch("/api/visits", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(p) });
+  const body = await r.json();
+  if (!r.ok) {
+    const d = body.detail;
+    $("msg").textContent = typeof d === "string" ? d : d.message;
+    if (d.flags) {
+      renderFlags(d.flags, false);
+      if (!showIssues()) {
+        // Issues are hidden, so say here why check-in was refused and offer the override.
+        $("msg").textContent = "Cannot check in: " + d.flags.map(f => f.message).join("; ") + ". Fix the values, or enter an override reason.";
+        $("overrideRow").classList.remove("hidden");
+      }
+    }
+    return;
+  }
+  $("msg").textContent = `Visit #${body.visit_id} checked in (${body.corrections} field(s) corrected by reviewer).`;
+  $("review").classList.add("hidden"); $("flagsBox").classList.add("hidden"); $("gapsBox").classList.add("hidden");
+  scan = null; setFiles([]); captureCount = 0; $("scanState").textContent = `Visit #${body.visit_id} checked in.`;
+  loadVisits();
+};
+
+async function loadVisits() {
+  const v = await (await fetch("/api/visits")).json();
+  $("visits").innerHTML = v.map(x => `<tr><td>${x.id}</td><td>${esc(x.trailer_number)}</td><td>${esc(x.bol_number)}</td>
+    <td>${x.status === "checked_in" ? `<button class="secondary" onclick="checkout(${x.id})">Check out</button>` : '<span class="muted">out</span>'}</td></tr>`).join("")
+    || '<tr><td colspan="4" class="muted">No visits yet</td></tr>';
+}
+async function checkout(id) { await fetch(`/api/visits/${id}/check-out`, { method: "POST" }); loadVisits(); }
+loadVisits();
+
+function showIssues() { return $("showIssues").checked; }
+function applyIssues() {
+  document.body.classList.toggle("hide-issues", !showIssues());
+  document.querySelectorAll("#fields .field").forEach(div => div.title = showIssues() ? div.dataset.tip : "");
+  if (scan) renderFlags(scan.flags, scan.ready_for_check_in);
+}
+$("showIssues").onchange = () => {
+  try { localStorage.setItem("showIssues", showIssues() ? "1" : "0"); } catch {}
+  applyIssues();
+};
+try { $("showIssues").checked = localStorage.getItem("showIssues") === "1"; } catch {}
+applyIssues();
+</script>
+</body>
+</html>

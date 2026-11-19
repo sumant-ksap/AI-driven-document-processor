@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Secrets and per-machine files: never commit.
+# HTTPS private key (scripts/make_cert.py recreates it)
+certs/
+# Visits database, gate PIN, session secret
+data/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

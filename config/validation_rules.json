@@ -1,0 +1,98 @@
+{
+  "_comment": "Site-specific rules. Tune these per facility.",
+  "review_confidence_threshold": 0.8,
+  "required_fields": [
+    "trailer_number",
+    "carrier_name",
+    "driver_name"
+  ],
+  "recommended_fields": [
+    "bol_number",
+    "carrier_scac",
+    "shipper",
+    "consignee"
+  ],
+  "address_fields": [
+    "shipper_address",
+    "consignee_address",
+    "bill_to_address"
+  ],
+  "formats": {
+    "carrier_scac": {
+      "pattern": "^[A-Z]{2,4}$",
+      "message": "SCAC must be 2-4 uppercase letters"
+    },
+    "truck_plate_state": {
+      "pattern": "^[A-Z]{2}$",
+      "message": "Use a 2-letter state/province code"
+    },
+    "driver_license_state": {
+      "pattern": "^[A-Z]{2}$",
+      "message": "Use a 2-letter state/province code"
+    },
+    "trailer_number": {
+      "pattern": "^[A-Z0-9-]{3,15}$",
+      "message": "Trailer # should be 3-15 letters/digits"
+    },
+    "usdot_number": {
+      "pattern": "^[0-9]{5,8}$",
+      "message": "USDOT # is 5-8 digits"
+    },
+    "mc_number": {
+      "pattern": "^(MC-?)?[0-9]{5,7}$",
+      "message": "MC # is 5-7 digits"
+    },
+    "ship_date": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "message": "Date should be YYYY-MM-DD"
+    },
+    "pickup_window": {
+      "pattern": "^\\d{2}:\\d{2}-\\d{2}:\\d{2}$",
+      "message": "Window should be HH:MM-HH:MM"
+    },
+    "piece_count": {
+      "pattern": "^[0-9]+$",
+      "message": "Pieces must be a whole number"
+    },
+    "weight_lbs": {
+      "pattern": "^[0-9]+(\\.[0-9]+)?$",
+      "message": "Weight must be numeric"
+    },
+    "hazmat": {
+      "pattern": "^(yes|no)$",
+      "message": "Hazmat must be yes or no"
+    },
+    "shipper_signed": {
+      "pattern": "^(yes|no)$",
+      "message": "Must be yes or no"
+    },
+    "carrier_signed": {
+      "pattern": "^(yes|no)$",
+      "message": "Must be yes or no"
+    },
+    "estimated_delivery_date": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "message": "Date should be YYYY-MM-DD"
+    }
+  },
+  "line_item_formats": {
+    "quantity": {
+      "pattern": "^[0-9]+$",
+      "message": "QTY must be a whole number"
+    },
+    "pieces": {
+      "pattern": "^[0-9]+$",
+      "message": "PCS must be a whole number"
+    },
+    "weight_lbs": {
+      "pattern": "^[0-9]+(\\.[0-9]+)?$",
+      "message": "Weight must be numeric (lbs)"
+    },
+    "freight_class": {
+      "pattern": "^(50|55|60|65|70|77\\.5|85|92\\.5|100|110|125|150|175|200|250|300|400|500)$",
+      "message": "Not a valid NMFC freight class"
+    }
+  },
+  "duplicate_window_hours": 24,
+  "fuzzy_match_threshold": 0.85
+}
