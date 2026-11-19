@@ -326,7 +326,8 @@ def find_duplicates(fields: list[YmsField], conn, rules: dict) -> tuple[list[dic
                                                "bol_number": visit["bol_number"], "reasons": []})
         entry["reasons"].append(reason)
 
-    visits = conn.execute("SELECT * FROM visits WHERE status = 'checked_in' OR created_at >= ?", (since,)).fetchall()
+    visits = conn.execute("SELECT * FROM visits WHERE status != 'deleted' AND (status = 'checked_in' OR created_at >= ?)",
+                          (since,)).fetchall()
 
     trl = norm_id(by_key.get("trailer_number"))
     bol = norm_id(by_key.get("bol_number"))

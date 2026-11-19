@@ -54,7 +54,9 @@ def main() -> None:
     print("  First visit on each device: 'connection not private' -> Advanced -> Proceed.\n")
 
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=PORT,
+    # timeout_keep_alive: uvicorn's 5 s default races with clients that poll scan status every
+    # ~5 s (the server closes the idle connection just as the client reuses it).
+    uvicorn.run("app.main:app", host="0.0.0.0", port=PORT, timeout_keep_alive=65,
                 ssl_certfile=str(CERT), ssl_keyfile=str(KEY), log_level="info")
 
 

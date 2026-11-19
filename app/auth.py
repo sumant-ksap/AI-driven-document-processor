@@ -1,8 +1,9 @@
-"""PIN login for when the app is reachable from other devices on the network.
+"""Login for when the app is reachable from other devices on the network.
 
 Enabled only when the GATE_PIN environment variable is set (scripts/serve_network.py sets it).
-After a correct PIN the browser gets a signed session cookie valid for one shift (12 h).
-Changing the PIN or deleting data/session_secret logs every device out.
+- People: after a correct PIN the browser gets a signed session cookie valid for one shift (12 h).
+  Changing the PIN or deleting data/session_secret logs every device out.
+- Systems: send an API key (scripts/api_key.py) as 'X-API-Key: <key>' or 'Authorization: Bearer <key>'.
 """
 
 from __future__ import annotations
@@ -67,12 +68,33 @@ def _locked(client: str) -> bool:
     return len(q) >= MAX_FAILURES
 
 
-async def require_pin(request: Request, call_next):
-    """HTTP middleware: lets requests through when no PIN is configured or the session is valid."""
-    if pin() is None or request.url.path in OPEN_PATHS or valid_token(request.cookies.get(COOKIE)):
+def api_key_from(request: Request) -> str | None:
+    """API key from 'X-API-Key: <key>' or 'Authorization: Bearer <key>'."""
+    key = request.headers.get("x-api-key")
+    if not key:
+        scheme, _, value = request.headers.get("authorization", "").partition(" ")
+        key = value.strip() if scheme.lower() == "bearer" else None
+    return key or None
+
+
+def valid_api_key(key: str) -> bool:
+    from . import db
+    with db.connect() as conn:
+        return db.check_api_key(conn, key) is not None
+
+
+async def require_auth(request: Request, call_next):
+    """HTTP middleware. Lets a request through when no PIN is configured (local mode), for CORS
+    preflight, for open paths, with a valid PIN session cookie, or with a valid API key."""
+    if (pin() is None or request.method == "OPTIONS" or request.url.path in OPEN_PATHS
+            or valid_token(request.cookies.get(COOKIE))):
         return await call_next(request)
-    if request.url.path.startswith("/api/"):
-        return JSONResponse({"detail": "Session expired. Enter the PIN again."}, status_code=401)
+    key = api_key_from(request)
+    if key and valid_api_key(key):
+        return await call_next(request)
+    if request.url.path.startswith("/api/") or key:
+        detail = "Invalid or revoked API key." if key else "Login required: send an API key, or enter the PIN again."
+        return JSONResponse({"detail": detail}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
     return RedirectResponse("/login", status_code=303)
 
 
