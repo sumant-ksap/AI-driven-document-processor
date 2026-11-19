@@ -5,6 +5,7 @@ uvicorn[standard]>=0.30
 python-multipart>=0.0.9
 pillow>=10.0
 pydantic>=2.7
+cryptography>=42   # scripts/make_cert.py (HTTPS for tablets/phones)
 # dev
 pytest>=8.0
 httpx>=0.27
